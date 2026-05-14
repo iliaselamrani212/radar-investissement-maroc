@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+env/
+.env
+.env.local
+*.log
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+build/
+.turbo/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Données scrapées (trop volumineuses, gardées localement)
+scraping/raw_data/*.json
+!scraping/raw_data/.gitkeep
+
+# Database & Docker volumes
+postgres_data/
+*.sqlite
+*.db
+
+# Secrets - NE JAMAIS PUSH
+.env
+*.key
+*.pem
+secrets/
+
+# Build outputs
+*.egg-info/
+.pytest_cache/
