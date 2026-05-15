@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, FolderKanban, BarChart3, Map, Radar } from "lucide-react";
+import { LayoutDashboard, FolderKanban, BarChart3, Map, Radar, BrainCircuit } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const links = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/projects", label: "Projets", icon: FolderKanban },
+  { href: "/ai", label: "IA locale", icon: BrainCircuit },
   { href: "/analytics", label: "Analytique", icon: BarChart3 },
   { href: "/map", label: "Carte", icon: Map },
 ];
@@ -22,21 +23,25 @@ export default function Sidebar() {
         <h1 className="text-xl font-bold">Radar Maroc</h1>
       </div>
       <nav className="flex-1 p-4 space-y-2">
-        {links.map((link) => (
-          <Link
-            key={link.href}
-            href={link.href}
-            className={cn(
-              "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
-              pathname === link.href
-                ? "bg-white/20 font-semibold"
-                : "hover:bg-white/10"
-            )}
-          >
-            <link.icon className="h-5 w-5" />
-            {link.label}
-          </Link>
-        ))}
+        {links.map((link) => {
+          const isActive = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
+
+          return (
+            <Link
+              key={link.href}
+              href={link.href}
+              className={cn(
+                "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
+                isActive
+                  ? "bg-white/20 font-semibold"
+                  : "hover:bg-white/10"
+              )}
+            >
+              <link.icon className="h-5 w-5" />
+              {link.label}
+            </Link>
+          );
+        })}
       </nav>
     </aside>
   );
