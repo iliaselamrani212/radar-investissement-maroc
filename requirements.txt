@@ -1,0 +1,55 @@
+# ═══════════════════════════════════════════════════════════════
+# Radar SDG Capital - Dépendances Python (100% local avec Ollama)
+# ═══════════════════════════════════════════════════════════════
+# AUCUNE clé API requise. Le LLM tourne en local via Ollama (Qwen 2.5 7B).
+
+# === LLM via Ollama (HTTP local) ===
+requests>=2.31.0             # Client HTTP pour Ollama
+tenacity>=8.2.0              # Retries automatiques
+
+# === Embeddings (local, gratuit) ===
+sentence-transformers>=2.5.0 # Pour déduplication / similarité
+numpy>=1.24.0
+
+# === Validation & schémas ===
+pydantic>=2.0.0
+
+# === Lecture documents officiels ===
+pdfplumber>=0.10.0           # PDFs (Bulletin Officiel)
+pdf2image>=1.16.0            # OCR fallback
+pytesseract>=0.3.10          # OCR français + arabe
+openpyxl>=3.1.0              # Excel (data.gov.ma)
+pandas>=2.0.0
+python-docx>=1.0.0           # DOCX
+markdown>=3.5.0              # Génération de fiches
+beautifulsoup4>=4.12.0       # HTML parsing
+lxml>=4.9.0
+
+# === Scraping ===
+httpx>=0.25.0
+playwright>=1.40.0           # Pour sites JS (Charika)
+
+# === API & Serveur ===
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+
+# === Base de données ===
+# sqlite est builtin Python
+sqlalchemy>=2.0.0            # Optionnel pour PostgreSQL
+psycopg2-binary>=2.9.0       # Pour PostgreSQL en prod (optionnel)
+
+# === Géocodage ===
+geopy>=2.4.0
+
+# === Utils ===
+python-dotenv>=1.0.0
+schedule>=1.2.0
+loguru>=0.7.0
+
+# === Export PDF (optionnel) ===
+# weasyprint>=60.0           # Décommenter si export PDF voulu
+
+# === Tests ===
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
