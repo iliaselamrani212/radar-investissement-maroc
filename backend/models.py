@@ -1,7 +1,10 @@
 from sqlalchemy import Column, Integer, Text, Numeric, Boolean, Date, DateTime
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
-from database import Base
+try:
+    from database import Base
+except ModuleNotFoundError:
+    from .database import Base
 import uuid
 
 
