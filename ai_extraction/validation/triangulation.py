@@ -113,24 +113,85 @@ def calculer_score_fiabilite(projet: ProjetInvestissement) -> float:
     - Score de confiance d'extraction
     - Anomalies détectées
     """
-    # Base : score de confiance d'extraction (0-1 → 0-50)
-    score = projet.score_confiance_extraction * 50
+    try:
+        from ..database import get_scoring_config
+        cfg = get_scoring_config()
+    except Exception:
+        cfg = {
+            "poids_source": 0.30,
+            "poids_triangulation": 0.30,
+            "poids_precision": 0.15,
+            "poids_fraicheur": 0.15,
+            "poids_llm": 0.10,
+        }
 
-    # Bonus triangulation : +10 par source confirmée (max +30)
-    bonus_sources = min(30, projet.nb_sources_confirmees * 10)
-    score += bonus_sources
+    niveau_principal = _get_niveau_source(projet.source_principale or "")
+    niveaux = [niveau_principal] + [
+        s.get("niveau_fiabilite", s.get("niveau", 3))
+        for s in (projet.sources or [])
+    ]
+    score_source = min(100, (sum(niveaux) / max(len(niveaux), 1)) * 20)
+    score_triangulation = min(100, max(0, projet.nb_sources_confirmees - 1) * 50)
+    champs = [
+        projet.montant_mad,
+        projet.secteur,
+        projet.region,
+        projet.porteur,
+        projet.stade_avancement,
+    ]
+    score_precision = (sum(1 for champ in champs if champ) / len(champs)) * 100
+    score_fraicheur = _score_fraicheur(projet)
+    score_llm = projet.score_confiance_extraction * 100
 
-    # Bonus niveau des sources : moyenne des niveaux × 4 (max +20)
-    if projet.sources:
-        niveaux = [s.get("niveau_fiabilite", 3) for s in projet.sources]
-        moyenne_niveau = sum(niveaux) / len(niveaux)
-        score += moyenne_niveau * 4
-    else:
-        score += 12  # niveau 3 par défaut
+    score = (
+        score_source * cfg["poids_source"]
+        + score_triangulation * cfg["poids_triangulation"]
+        + score_precision * cfg["poids_precision"]
+        + score_fraicheur * cfg["poids_fraicheur"]
+        + score_llm * cfg["poids_llm"]
+    )
 
     # Malus anomalies
     for anomalie in projet.anomalies:
         score += anomalie.get("impact_fiabilite", 0)
 
+    projet.score_details = {
+        "score_niveau_source": round(score_source, 1),
+        "score_triangulation": round(score_triangulation, 1),
+        "score_precision_donnees": round(score_precision, 1),
+        "score_fraicheur": round(score_fraicheur, 1),
+        "score_llm": round(score_llm, 1),
+        "poids": {
+            "source": cfg["poids_source"],
+            "triangulation": cfg["poids_triangulation"],
+            "precision": cfg["poids_precision"],
+            "fraicheur": cfg["poids_fraicheur"],
+            "llm": cfg["poids_llm"],
+        },
+    }
+
     # Bornage 0-100
     return max(0.0, min(100.0, round(score, 1)))
+
+
+def _score_fraicheur(projet: ProjetInvestissement) -> float:
+    from datetime import date, datetime
+
+    d = projet.date_annonce
+    if not d:
+        d = projet.created_at.date() if projet.created_at else date.today()
+    if isinstance(d, str):
+        try:
+            d = datetime.fromisoformat(d).date()
+        except ValueError:
+            d = date.today()
+    age_jours = max(0, (date.today() - d).days)
+    if age_jours <= 30:
+        return 100.0
+    if age_jours <= 90:
+        return 80.0
+    if age_jours <= 180:
+        return 60.0
+    if age_jours <= 365:
+        return 40.0
+    return 20.0

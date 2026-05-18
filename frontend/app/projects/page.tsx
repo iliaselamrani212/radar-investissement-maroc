@@ -2,14 +2,14 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { fetchProjects, fetchSectors, fetchRegions, formatMAD, exportCsv } from "@/lib/api";
+import { fetchProjects, fetchSectors, fetchRegions, formatMAD, exportCsv, exportPdf } from "@/lib/api";
 import Header from "@/components/Header";
 import ScoreBadge from "@/components/ScoreBadge";
 import Loading from "@/components/Loading";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
-import { Download, ChevronLeft, ChevronRight } from "lucide-react";
+import { Download, ChevronLeft, ChevronRight, FileText } from "lucide-react";
 
 export default function ProjectsPage() {
   const [filters, setFilters] = useState({
@@ -44,7 +44,7 @@ export default function ProjectsPage() {
       <Header title="Projets d'Investissement" onSearch={(val) => updateFilter("search", val)} />
       <div className="p-8 space-y-6 overflow-y-auto">
         {/* Filtres */}
-        <div className="bg-white p-4 rounded-xl shadow-sm border grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+        <div className="bg-white p-4 rounded-xl shadow-sm border grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
           <select className="border rounded-md p-2 text-sm" value={filters.secteur} onChange={e => updateFilter("secteur", e.target.value)}>
             <option value="">Tous les secteurs</option>
             {sectors?.map((s: string) => <option key={s} value={s}>{s}</option>)}
@@ -64,6 +64,9 @@ export default function ProjectsPage() {
           <Input placeholder="Montant max" type="number" value={filters.montant_max} onChange={e => updateFilter("montant_max", e.target.value)} />
           <Button className="bg-primary hover:bg-primary/90" onClick={() => exportCsv(filters)}>
             <Download className="mr-2 h-4 w-4" /> Export CSV
+          </Button>
+          <Button variant="outline" onClick={() => exportPdf(filters)}>
+            <FileText className="mr-2 h-4 w-4" /> PDF
           </Button>
         </div>
 

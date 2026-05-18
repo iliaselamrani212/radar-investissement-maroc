@@ -4,6 +4,7 @@ Aligné avec LIVRABLE 3 du brief SDG :
 "Fiches projets synthétiques avec informations clés détectées automatiquement"
 """
 import logging
+import re
 from typing import Dict, Any, List
 
 from ..llm_client import llm
@@ -11,6 +12,22 @@ from ..models import ProjetInvestissement
 from ..prompts import PROMPT_FICHE_PROJET
 
 logger = logging.getLogger(__name__)
+
+
+def nettoyer_fiche_publique(fiche: str) -> str:
+    """Retire les mentions internes avant affichage ou export."""
+    text = fiche or ""
+    text = re.sub(r"SDG\s+Capital", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"data\.gov\.ma", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\n?##\s+Sources\s*&\s*fiabilit\S*[\s\S]*$", "", text, flags=re.IGNORECASE)
+    text = re.sub(
+        r"(?im)^\s*[-*]?\s*(Nombre de sources|Sources confirmees?|Source principale)\s*:.*$",
+        "",
+        text,
+    )
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
 
 
 def generer_fiche_projet(
@@ -40,7 +57,7 @@ def generer_fiche_projet(
 
     try:
         fiche = llm.complete(prompt, max_tokens=1500, temperature=0.2)
-        return fiche
+        return nettoyer_fiche_publique(fiche)
     except Exception as e:
         logger.error(f"Erreur génération fiche: {e}")
         return _fiche_fallback(projet, enrichissement, sources_confirmees)
@@ -125,32 +142,28 @@ def _fiche_fallback(
     )
     return f"""# {projet.titre}
 
-## 📋 Résumé exécutif
+## Résumé exécutif
 {projet.description}
 
-## 🎯 Points clés
+## Points clés
 - **Montant** : {montant}
 - **Secteur** : {projet.secteur} {f'({projet.sous_secteur})' if projet.sous_secteur else ''}
 - **Localisation** : {projet.region or 'N/A'} {f'- {projet.ville}' if projet.ville else ''}
 - **Porteur** : {projet.porteur or 'Non précisé'}
 - **Stade d'avancement** : {projet.stade_avancement}
 
-## 📊 Analyse contextuelle
+## Analyse contextuelle
 {enrichissement.get('analyse_contextuelle', 'Analyse contextuelle indisponible.')}
 
-## ✅ Sources & fiabilité
-- Score de fiabilité : **{projet.score_fiabilite or 'N/A'}/100**
-- Sources confirmées : **{projet.nb_sources_confirmees}**
-- Source principale : {projet.source_principale or 'N/A'}
 """
 
 
 def exporter_fiche_pdf(projet: ProjetInvestissement, output_path: str) -> str:
     """
-    Exporte la fiche en PDF (pour partage par SDG Capital).
+    Exporte la fiche en PDF.
     Nécessite : pip install markdown weasyprint OU reportlab
     """
-    fiche_md = projet.fiche_synthetique or generer_fiche_projet(projet)
+    fiche_md = nettoyer_fiche_publique(projet.fiche_synthetique or generer_fiche_projet(projet))
 
     try:
         import markdown

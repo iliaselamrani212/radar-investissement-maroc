@@ -1,9 +1,7 @@
-from fastapi import FastAPI, Query, HTTPException, Depends
+from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
-from sqlalchemy import text
 from pathlib import Path
 from typing import Optional, Any
 from urllib import request as urlrequest
@@ -11,14 +9,11 @@ import json
 import csv
 import io
 import logging
+import os
+import re
 import sys
-
-try:
-    from database import engine, get_db
-    from models import Base, Project, Region
-except ModuleNotFoundError:
-    from .database import engine, get_db
-    from .models import Base, Project, Region
+import threading
+import time
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -26,13 +21,16 @@ if str(PROJECT_ROOT) not in sys.path:
 
 logger = logging.getLogger(__name__)
 
+# Initialise la base IA au démarrage
 try:
-    Base.metadata.create_all(bind=engine)
+    from ai_extraction.database import init_db
+    init_db()
+    logger.info("Base IA initialisée")
 except Exception as exc:
-    logger.warning("Base PostgreSQL indisponible au demarrage: %s", exc)
+    logger.warning("Base IA indisponible au démarrage: %s", exc)
 
 app = FastAPI(
-    title="Radar Investissement Maroc API",
+    title="InvestiGator 43 API",
     description="API Backend pour détecter, structurer et prioriser les projets d'investissement au Maroc.",
     version="1.0.0"
 )
@@ -70,6 +68,19 @@ class LLMDocumentInput(BaseModel):
     snippet: Optional[str] = None
 
 
+class RagQuestionInput(BaseModel):
+    question: str
+    top_k: int = 5
+
+
+class ScoringConfigInput(BaseModel):
+    poids_source: float
+    poids_triangulation: float
+    poids_precision: float
+    poids_fraicheur: float
+    poids_llm: float
+
+
 def _load_ai_database():
     try:
         from ai_extraction.database import init_db, get_all_projets, get_projet, save_projet
@@ -82,6 +93,23 @@ def _load_ai_database():
         ) from exc
 
 
+def _clean_public_text(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value)
+    text = re.sub(r"SDG\s+Capital", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"data\.gov\.ma", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\n?##\s+Sources\s*&\s*fiabilit\S*[\s\S]*$", "", text, flags=re.IGNORECASE)
+    text = re.sub(
+        r"(?im)^\s*[-*]?\s*(Nombre de sources|Sources confirmees?|Source principale)\s*:.*$",
+        "",
+        text,
+    )
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
 def _normalize_ai_project(projet: Any) -> dict:
     data = projet.model_dump(mode="json")
     score_confiance = data.get("score_confiance_extraction")
@@ -89,9 +117,9 @@ def _normalize_ai_project(projet: Any) -> dict:
     return {
         "id": data.get("id"),
         "titre": data.get("titre"),
-        "resume_ai": data.get("description") or data.get("fiche_synthetique"),
-        "description": data.get("description"),
-        "fiche_synthetique": data.get("fiche_synthetique"),
+        "resume_ai": _clean_public_text(data.get("description") or data.get("fiche_synthetique")),
+        "description": _clean_public_text(data.get("description")),
+        "fiche_synthetique": _clean_public_text(data.get("fiche_synthetique")),
         "montant_mad": data.get("montant_mad"),
         "secteur": data.get("secteur"),
         "region": data.get("region"),
@@ -104,7 +132,7 @@ def _normalize_ai_project(projet: Any) -> dict:
         "latitude": data.get("latitude"),
         "longitude": data.get("longitude"),
         "score_fiabilite": data.get("score_fiabilite"),
-        "score_details": {
+        "score_details": data.get("score_details") or {
             "score_llm": round(score_confiance * 100, 1) if score_confiance is not None else None,
             "score_fiabilite": data.get("score_fiabilite"),
         },
@@ -127,10 +155,97 @@ def _normalize_ai_project(projet: Any) -> dict:
     }
 
 
+def _pdf_escape(value: Any) -> str:
+    text = str(value if value is not None else "")
+    text = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    return text.encode("latin-1", "replace").decode("latin-1")
+
+
+def _simple_pdf(title: str, lines: list[str]) -> bytes:
+    """Genere un PDF minimal sans dependance externe."""
+    safe_lines = [_pdf_escape(title[:90])] + [_pdf_escape(line[:110]) for line in lines]
+    y = 800
+    commands = ["BT", "/F1 16 Tf", f"50 {y} Td", f"({safe_lines[0]}) Tj"]
+    commands += ["/F1 10 Tf"]
+    for line in safe_lines[1:]:
+        y_step = -16
+        commands.append(f"0 {y_step} Td")
+        commands.append(f"({line}) Tj")
+    commands.append("ET")
+    stream = "\n".join(commands).encode("latin-1", "replace")
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream",
+    ]
+    pdf = [b"%PDF-1.4\n"]
+    offsets = [0]
+    for index, obj in enumerate(objects, start=1):
+        offsets.append(sum(len(part) for part in pdf))
+        pdf.append(f"{index} 0 obj\n".encode() + obj + b"\nendobj\n")
+    xref = sum(len(part) for part in pdf)
+    pdf.append(f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode())
+    for offset in offsets[1:]:
+        pdf.append(f"{offset:010d} 00000 n \n".encode())
+    pdf.append(
+        f"trailer << /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF".encode()
+    )
+    return b"".join(pdf)
+
+
+def _run_veille_job() -> None:
+    try:
+        from ai_extraction.database import (
+            get_all_projets,
+            init_db,
+            save_veille_run,
+        )
+        from ai_extraction.veille.tendances import generer_rapport_veille_hebdo
+
+        init_db()
+        projets = get_all_projets(limit=1000)
+        rapport = generer_rapport_veille_hebdo(projets)
+        save_veille_run("ok", nb_projets=len(projets), rapport_markdown=rapport)
+        logger.info("Veille automatique executee (%s projets)", len(projets))
+    except Exception as exc:
+        logger.warning("Veille automatique KO: %s", exc)
+        try:
+            from ai_extraction.database import save_veille_run
+
+            save_veille_run("error", error=str(exc))
+        except Exception:
+            pass
+
+
+def _start_veille_scheduler() -> None:
+    if os.getenv("VEILLE_SCHEDULER_DISABLED", "0") == "1":
+        return
+
+    interval_hours = float(os.getenv("VEILLE_INTERVAL_HOURS", "168"))
+    interval_seconds = max(60, int(interval_hours * 3600))
+
+    def loop() -> None:
+        # Premiere execution differee pour ne pas ralentir le demarrage API.
+        time.sleep(5)
+        while True:
+            _run_veille_job()
+            time.sleep(interval_seconds)
+
+    thread = threading.Thread(target=loop, name="veille-scheduler", daemon=True)
+    thread.start()
+
+
+@app.on_event("startup")
+def startup_scheduler():
+    _start_veille_scheduler()
+
+
 @app.get("/")
 def root():
     return {
-        "message": "Radar Investissement Maroc API",
+        "message": "InvestiGator 43 API",
         "status": "running",
         "docs": "/docs"
     }
@@ -173,7 +288,7 @@ def llm_status():
             OLLAMA_MODEL in model or model.startswith(OLLAMA_MODEL.split(":")[0])
             for model in models
         )
-        status["message"] = "Ollama disponible" if status["model_available"] else "ModÃ¨le configurÃ© introuvable"
+        status["message"] = "Ollama disponible" if status["model_available"] else "Modele configure introuvable"
     except Exception as exc:
         status["message"] = str(exc)
 
@@ -333,193 +448,129 @@ def list_projects(
     stade: Optional[str] = None,
     score_min: Optional[float] = None,
     search: Optional[str] = None,
-    sort_by: str = Query(
-        "score_fiabilite",
-        pattern="^(score_fiabilite|montant_mad|date_annonce|created_at)$"
-    ),
+    sort_by: str = Query("score_fiabilite", pattern="^(score_fiabilite|montant_mad|date_annonce|created_at)$"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db)
 ):
-    query = "SELECT * FROM projects WHERE 1=1"
-    count_query = "SELECT COUNT(*) FROM projects WHERE 1=1"
-    params = {}
+    from ai_extraction.database import get_all_projets, init_db
+    init_db()
 
-    if secteur:
-        query += " AND secteur = :secteur"
-        count_query += " AND secteur = :secteur"
-        params["secteur"] = secteur
-
-    if region:
-        query += " AND region = :region"
-        count_query += " AND region = :region"
-        params["region"] = region
-
-    if montant_min is not None:
-        query += " AND montant_mad >= :montant_min"
-        count_query += " AND montant_mad >= :montant_min"
-        params["montant_min"] = montant_min
+    projets = get_all_projets(
+        limit=1000,
+        secteur=secteur,
+        region=region,
+        stade=stade,
+        montant_min=montant_min,
+    )
 
     if montant_max is not None:
-        query += " AND montant_mad <= :montant_max"
-        count_query += " AND montant_mad <= :montant_max"
-        params["montant_max"] = montant_max
-
-    if stade:
-        query += " AND stade = :stade"
-        count_query += " AND stade = :stade"
-        params["stade"] = stade
-
+        projets = [p for p in projets if p.montant_mad is None or p.montant_mad <= montant_max]
     if score_min is not None:
-        query += " AND score_fiabilite >= :score_min"
-        count_query += " AND score_fiabilite >= :score_min"
-        params["score_min"] = score_min
-
+        projets = [p for p in projets if (p.score_fiabilite or 0) >= score_min]
     if search:
-        query += """
-        AND (
-            titre ILIKE :search
-            OR resume_ai ILIKE :search
-            OR porteur ILIKE :search
-            OR secteur ILIKE :search
-            OR region ILIKE :search
-        )
-        """
-        count_query += """
-        AND (
-            titre ILIKE :search
-            OR resume_ai ILIKE :search
-            OR porteur ILIKE :search
-            OR secteur ILIKE :search
-            OR region ILIKE :search
-        )
-        """
-        params["search"] = f"%{search}%"
+        needle = search.lower()
+        projets = [
+            p for p in projets
+            if needle in " ".join([p.titre or "", p.description or "", p.porteur or "", p.secteur or "", p.region or ""]).lower()
+        ]
 
-    query += f" ORDER BY {sort_by} DESC NULLS LAST LIMIT :limit OFFSET :offset"
-    params["limit"] = limit
-    params["offset"] = offset
+    total = len(projets)
+    items = [_normalize_ai_project(p) for p in projets[offset:offset + limit]]
 
-    total = db.execute(
-        text(count_query),
-        {k: v for k, v in params.items() if k not in ["limit", "offset"]}
-    ).scalar()
-
-    result = db.execute(text(query), params).fetchall()
-    items = [dict(row._mapping) for row in result]
-
-    return {
-        "total": total,
-        "items": items,
-        "limit": limit,
-        "offset": offset
-    }
+    return {"total": total, "items": items, "limit": limit, "offset": offset}
 
 
 @app.get("/projects/{project_id}")
-def get_project(project_id: str, db: Session = Depends(get_db)):
-    result = db.execute(
-        text("SELECT * FROM projects WHERE id = :id"),
-        {"id": project_id}
-    ).fetchone()
-
-    if not result:
+def get_project(project_id: str):
+    from ai_extraction.database import get_projet, init_db
+    init_db()
+    projet = get_projet(project_id)
+    if not projet:
         raise HTTPException(status_code=404, detail="Projet introuvable")
-
-    return dict(result._mapping)
+    return _normalize_ai_project(projet)
 
 
 @app.get("/projects/{project_id}/sources")
-def get_project_sources(project_id: str, db: Session = Depends(get_db)):
-    result = db.execute(
-        text("SELECT titre, sources FROM projects WHERE id = :id"),
-        {"id": project_id}
-    ).fetchone()
-
-    if not result:
+def get_project_sources(project_id: str):
+    from ai_extraction.database import get_projet, init_db
+    init_db()
+    projet = get_projet(project_id)
+    if not projet:
         raise HTTPException(status_code=404, detail="Projet introuvable")
-
-    row = dict(result._mapping)
-
-    return {
-        "project": row["titre"],
-        "sources": row["sources"]
-    }
+    return {"project": projet.titre, "sources": projet.sources or []}
 
 
 @app.get("/stats")
-def get_stats(db: Session = Depends(get_db)):
-    total = db.execute(text("SELECT COUNT(*) FROM projects")).scalar()
+def get_stats():
+    try:
+        import sqlite3
+        from pathlib import Path
+        db_path = Path(__file__).parent.parent / "data" / "radar_sdg.db"
+        if not db_path.exists():
+            return {
+                "total_projects": 0, "total_amount_mad": 0.0, "average_score": 0.0,
+                "by_sector": [], "by_region": [], "by_stade": [], "timeline": []
+            }
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
 
-    total_amount = db.execute(
-        text("SELECT COALESCE(SUM(montant_mad), 0) FROM projects")
-    ).scalar()
+        total = cur.execute("SELECT COUNT(*) FROM projets").fetchone()[0]
+        total_amount = cur.execute("SELECT COALESCE(SUM(montant_mad),0) FROM projets").fetchone()[0]
+        avg_score = cur.execute("SELECT COALESCE(AVG(score_fiabilite),0) FROM projets").fetchone()[0]
 
-    avg_score = db.execute(
-        text("SELECT COALESCE(AVG(score_fiabilite), 0) FROM projects")
-    ).scalar()
-
-    by_sector = db.execute(text("""
-        SELECT 
-            secteur,
-            COUNT(*) AS count,
-            COALESCE(SUM(montant_mad), 0) AS total
-        FROM projects
-        GROUP BY secteur
-        ORDER BY count DESC
-    """)).fetchall()
-
-    by_region = db.execute(text("""
-        SELECT 
-            region,
-            COUNT(*) AS count,
-            COALESCE(SUM(montant_mad), 0) AS total
-        FROM projects
-        WHERE region IS NOT NULL
-        GROUP BY region
-        ORDER BY count DESC
-    """)).fetchall()
-
-    by_stade = db.execute(text("""
-        SELECT 
-            stade,
-            COUNT(*) AS count
-        FROM projects
-        GROUP BY stade
-        ORDER BY count DESC
-    """)).fetchall()
-
-    timeline = db.execute(text("""
-        SELECT 
-            DATE_TRUNC('month', created_at) AS mois,
-            COUNT(*) AS count
-        FROM projects
-        GROUP BY mois
-        ORDER BY mois
-    """)).fetchall()
-
-    return {
-        "total_projects": total,
-        "total_amount_mad": float(total_amount),
-        "average_score": round(float(avg_score), 1),
-        "by_sector": [dict(row._mapping) for row in by_sector],
-        "by_region": [dict(row._mapping) for row in by_region],
-        "by_stade": [dict(row._mapping) for row in by_stade],
-        "timeline": [dict(row._mapping) for row in timeline]
-    }
+        by_sector = [
+            {"secteur": r["secteur"], "count": r["nb"], "total": r["total_mad"]}
+            for r in cur.execute("""
+                SELECT secteur, COUNT(*) nb, COALESCE(SUM(montant_mad),0) total_mad
+                FROM projets GROUP BY secteur ORDER BY nb DESC
+            """).fetchall()
+        ]
+        by_region = [
+            {"region": r["region"], "count": r["nb"], "total": r["total_mad"]}
+            for r in cur.execute("""
+                SELECT region, COUNT(*) nb, COALESCE(SUM(montant_mad),0) total_mad
+                FROM projets WHERE region IS NOT NULL GROUP BY region ORDER BY nb DESC
+            """).fetchall()
+        ]
+        by_stade = [
+            {"stade": r["stade_avancement"], "count": r["nb"]}
+            for r in cur.execute("""
+                SELECT stade_avancement, COUNT(*) nb FROM projets
+                GROUP BY stade_avancement ORDER BY nb DESC
+            """).fetchall()
+        ]
+        timeline = [
+            {"mois": r["mois"], "count": r["nb"]}
+            for r in cur.execute("""
+                SELECT substr(created_at,1,7) mois, COUNT(*) nb
+                FROM projets GROUP BY mois ORDER BY mois
+            """).fetchall()
+        ]
+        conn.close()
+        return {
+            "total_projects": total,
+            "total_amount_mad": float(total_amount),
+            "average_score": round(float(avg_score), 1),
+            "by_sector": by_sector,
+            "by_region": by_region,
+            "by_stade": by_stade,
+            "timeline": timeline,
+        }
+    except Exception as exc:
+        logger.warning("Stats IA indisponibles: %s", exc)
+        return {
+            "total_projects": 0, "total_amount_mad": 0.0, "average_score": 0.0,
+            "by_sector": [], "by_region": [], "by_stade": [], "timeline": []
+        }
 
 
 @app.get("/regions")
-def get_regions(db: Session = Depends(get_db)):
-    regions = db.query(Region).all()
-
+def get_regions():
+    from ai_extraction.enrichissement.geocoder import CENTRES_REGIONS
     return [
-        {
-            "nom": region.nom,
-            "latitude": float(region.latitude),
-            "longitude": float(region.longitude)
-        }
-        for region in regions
+        {"nom": region, "latitude": coords["lat"], "longitude": coords["lng"]}
+        for region, coords in CENTRES_REGIONS.items()
     ]
 
 
@@ -532,23 +583,80 @@ def get_sectors():
 def recent_alerts(
     score_min: float = 80,
     limit: int = Query(10, ge=1, le=50),
-    db: Session = Depends(get_db)
 ):
-    result = db.execute(text("""
-        SELECT *
-        FROM projects
-        WHERE score_fiabilite >= :score_min
-        ORDER BY created_at DESC
-        LIMIT :limit
-    """), {
-        "score_min": score_min,
-        "limit": limit
-    }).fetchall()
+    try:
+        from ai_extraction.database import get_all_projets, init_db
+        init_db()
+        projets = get_all_projets(limit=limit)
+        items = [
+            _normalize_ai_project(p)
+            for p in projets
+            if (p.score_fiabilite or 0) >= score_min
+        ][:limit]
+        return {"score_min": score_min, "items": items}
+    except Exception as exc:
+        logger.warning("Alertes IA indisponibles: %s", exc)
+        return {"score_min": score_min, "items": []}
+
+
+@app.get("/config/scoring")
+def get_scoring_config_endpoint():
+    from ai_extraction.database import get_scoring_config
+
+    return get_scoring_config()
+
+
+@app.put("/config/scoring")
+def update_scoring_config_endpoint(payload: ScoringConfigInput):
+    from ai_extraction.database import (
+        get_all_projets,
+        save_projet,
+        update_scoring_config,
+    )
+    from ai_extraction.validation.triangulation import calculer_score_fiabilite
+
+    try:
+        config = update_scoring_config(payload.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    recalcules = 0
+    for projet in get_all_projets(limit=5000):
+        projet.score_fiabilite = calculer_score_fiabilite(projet)
+        save_projet(projet)
+        recalcules += 1
+
+    return {"status": "ok", "config": config, "projets_recalcules": recalcules}
+
+
+@app.post("/config/scoring/recalculate")
+def recalculate_scoring_endpoint():
+    from ai_extraction.database import get_all_projets, save_projet
+    from ai_extraction.validation.triangulation import calculer_score_fiabilite
+
+    recalcules = 0
+    for projet in get_all_projets(limit=5000):
+        projet.score_fiabilite = calculer_score_fiabilite(projet)
+        save_projet(projet)
+        recalcules += 1
+    return {"status": "ok", "projets_recalcules": recalcules}
+
+
+@app.get("/veille/scheduler/status")
+def veille_scheduler_status():
+    from ai_extraction.database import get_last_veille_run
 
     return {
-        "score_min": score_min,
-        "items": [dict(row._mapping) for row in result]
+        "enabled": os.getenv("VEILLE_SCHEDULER_DISABLED", "0") != "1",
+        "interval_hours": float(os.getenv("VEILLE_INTERVAL_HOURS", "168")),
+        "last_run": get_last_veille_run(),
     }
+
+
+@app.post("/veille/run")
+def veille_run_now():
+    _run_veille_job()
+    return veille_scheduler_status()
 
 
 @app.get("/export/csv")
@@ -556,63 +664,155 @@ def export_csv(
     secteur: Optional[str] = None,
     region: Optional[str] = None,
     score_min: Optional[float] = None,
-    db: Session = Depends(get_db)
 ):
-    query = """
-    SELECT 
-        titre,
-        secteur,
-        region,
-        porteur,
-        montant_mad,
-        stade,
-        score_fiabilite,
-        nb_sources_confirmees
-    FROM projects
-    WHERE 1=1
-    """
-
-    params = {}
-
-    if secteur:
-        query += " AND secteur = :secteur"
-        params["secteur"] = secteur
-
-    if region:
-        query += " AND region = :region"
-        params["region"] = region
-
+    from ai_extraction.database import get_all_projets, init_db
+    init_db()
+    projets = get_all_projets(limit=1000, secteur=secteur, region=region)
     if score_min is not None:
-        query += " AND score_fiabilite >= :score_min"
-        params["score_min"] = score_min
-
-    query += " ORDER BY score_fiabilite DESC NULLS LAST"
-
-    rows = db.execute(text(query), params).fetchall()
+        projets = [p for p in projets if (p.score_fiabilite or 0) >= score_min]
 
     output = io.StringIO()
     writer = csv.writer(output)
-
-    writer.writerow([
-        "Titre",
-        "Secteur",
-        "Région",
-        "Porteur",
-        "Montant MAD",
-        "Stade",
-        "Score Fiabilité",
-        "Nombre Sources"
-    ])
-
-    for row in rows:
-        writer.writerow(row)
+    writer.writerow(["Titre", "Secteur", "Region", "Porteur", "Montant MAD", "Stade", "Score Fiabilite"])
+    for p in projets:
+        writer.writerow([p.titre, p.secteur, p.region, p.porteur, p.montant_mad, p.stade_avancement, p.score_fiabilite])
 
     output.seek(0)
-
     return StreamingResponse(
         iter([output.getvalue()]),
         media_type="text/csv",
-        headers={
-            "Content-Disposition": "attachment; filename=projets_investissement.csv"
-        }
+        headers={"Content-Disposition": "attachment; filename=projets_investissement.csv"}
     )
+
+
+@app.get("/export/pdf")
+def export_pdf(
+    secteur: Optional[str] = None,
+    region: Optional[str] = None,
+    score_min: Optional[float] = None,
+):
+    from ai_extraction.database import get_all_projets, init_db
+
+    init_db()
+    projets = get_all_projets(limit=1000, secteur=secteur, region=region)
+    if score_min is not None:
+        projets = [p for p in projets if (p.score_fiabilite or 0) >= score_min]
+
+    total = sum(p.montant_mad or 0 for p in projets)
+    lines = [
+        f"Nombre de projets: {len(projets)}",
+        f"Investissement total MAD: {total:,.0f}",
+        "",
+    ]
+    for p in projets[:45]:
+        lines.append(
+            f"- {p.titre} | {p.secteur} | {p.region or 'N/A'} | "
+            f"{p.montant_mad or 0:,.0f} MAD | score {p.score_fiabilite or 0}/100"
+        )
+
+    pdf = _simple_pdf("InvestiGator 43 - Export projets", lines)
+    return StreamingResponse(
+        io.BytesIO(pdf),
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=projets_investissement.pdf"},
+    )
+
+
+@app.get("/projects/{project_id}/export/pdf")
+def export_project_pdf(project_id: str):
+    from ai_extraction.database import get_projet, init_db
+
+    init_db()
+    projet = get_projet(project_id)
+    if not projet:
+        raise HTTPException(status_code=404, detail="Projet introuvable")
+
+    lines = [
+        f"Secteur: {projet.secteur}",
+        f"Region: {projet.region or 'N/A'}",
+        f"Porteur: {projet.porteur or 'N/A'}",
+        f"Montant MAD: {projet.montant_mad or 0:,.0f}",
+        f"Stade: {projet.stade_avancement}",
+        f"Score: {projet.score_fiabilite or 0}/100",
+        "",
+        _clean_public_text(projet.description) or "",
+        "",
+        (_clean_public_text(projet.fiche_synthetique) or "")[:2500],
+    ]
+    pdf = _simple_pdf(projet.titre, lines)
+    return StreamingResponse(
+        io.BytesIO(pdf),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=projet_{project_id}.pdf"},
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+# RAG — Interrogation des contenus indexes
+# ═══════════════════════════════════════════════════════════════
+
+def _load_rag():
+    try:
+        from ai_extraction.rag import (
+            poser_question,
+            ask_about_project,
+            ingerer_datasets_finance,
+            ingerer_projets,
+            rag_store,
+        )
+        return poser_question, ask_about_project, ingerer_datasets_finance, ingerer_projets, rag_store
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Module RAG indisponible: {exc}") from exc
+
+
+@app.get("/rag/status")
+def rag_status():
+    """État de l'index RAG (nombre de chunks, sources)."""
+    try:
+        *_, rag_store = _load_rag()
+        rag_store.init()
+        return {"ok": True, **rag_store.stats()}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("RAG status indisponible: %s", exc)
+        return {"ok": False, "total_chunks": 0, "par_source": []}
+
+
+@app.post("/rag/ingest")
+def rag_ingest(finance: bool = True, projets: bool = True):
+    """
+    Lance l'ingestion : contenus finance et/ou projets en base.
+    Opération longue (téléchargement + embeddings).
+    """
+    poser, ask_proj, ingerer_finance, ingerer_proj, rag_store = _load_rag()
+    rag_store.init()
+    resultat = {}
+
+    if finance:
+        resultat["finance"] = ingerer_finance(reset=True)
+    if projets:
+        from ai_extraction.database import get_all_projets, init_db
+        init_db()
+        resultat["projets"] = ingerer_proj(get_all_projets(limit=1000), reset=True)
+
+    return {"status": "ok", "details": resultat, **rag_store.stats()}
+
+
+@app.post("/rag/ask")
+def rag_ask(payload: RagQuestionInput):
+    """Question générale au RAG sur l'ensemble des données indexées."""
+    poser, *_ = _load_rag()
+    return poser(payload.question, top_k=payload.top_k)
+
+
+@app.post("/projects/{project_id}/ask")
+def rag_ask_project(project_id: str, payload: RagQuestionInput):
+    """Question RAG ancrée sur un projet précis + croisement données finance."""
+    poser, ask_proj, *_ = _load_rag()
+    from ai_extraction.database import get_projet, init_db
+    init_db()
+    projet = get_projet(project_id)
+    if not projet:
+        raise HTTPException(status_code=404, detail="Projet introuvable")
+    return ask_proj(projet, payload.question, top_k=payload.top_k)

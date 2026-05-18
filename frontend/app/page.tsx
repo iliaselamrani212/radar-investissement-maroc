@@ -31,7 +31,43 @@ import {
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
-const COLORS = ["#2D6A4F", "#40916C", "#52B788", "#74C69D", "#95D5B2", "#B7E4C7", "#D8F3DC"];
+const CHART = [
+  "hsl(158 58% 30%)",
+  "hsl(173 48% 42%)",
+  "hsl(197 50% 45%)",
+  "hsl(43 74% 52%)",
+  "hsl(262 45% 55%)",
+  "hsl(14 70% 55%)",
+];
+
+const tooltipStyle = {
+  borderRadius: 10,
+  border: "1px solid hsl(214 20% 90%)",
+  boxShadow: "0 4px 12px rgba(16,24,40,0.08)",
+  fontSize: 13,
+};
+
+function ChartCard({
+  title,
+  children,
+  delay = 0,
+}: {
+  title: string;
+  children: React.ReactNode;
+  delay?: number;
+}) {
+  return (
+    <div
+      className="surface animate-rise p-6"
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      <h3 className="mb-5 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+        {title}
+      </h3>
+      <div className="h-72">{children}</div>
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const { data: stats, isLoading: l1 } = useQuery<Stats>({
@@ -46,111 +82,189 @@ export default function DashboardPage() {
   if (l1 || l2) return <Loading />;
 
   return (
-    <div className="flex flex-col h-full">
-      <Header title="Tableau de Bord" />
-      <div className="p-8 space-y-8 overflow-y-auto">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <KPICard title="Projets Détectés" value={stats?.total_projects || 0} icon={Briefcase} />
-          <KPICard title="Investissement Total" value={formatMAD(stats?.total_amount_mad)} icon={DollarSign} />
-          <KPICard title="Score Moyen" value={`${stats?.average_score || 0}%`} icon={ShieldCheck} />
+    <div className="flex h-full flex-col">
+      <Header
+        title="Tableau de bord"
+        subtitle="Vue d'ensemble des investissements détectés au Maroc"
+      />
+
+      <div className="space-y-6 overflow-y-auto p-8">
+        {/* KPIs */}
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
           <KPICard
-            title="Projets Très Fiables (>80)"
+            title="Projets détectés"
+            value={stats?.total_projects || 0}
+            icon={Briefcase}
+            accent="primary"
+            description="Opportunites consolidees"
+          />
+          <KPICard
+            title="Investissement total"
+            value={formatMAD(stats?.total_amount_mad)}
+            icon={DollarSign}
+            accent="success"
+            description="Montant cumulé estimé"
+          />
+          <KPICard
+            title="Score moyen"
+            value={`${stats?.average_score || 0}%`}
+            icon={ShieldCheck}
+            accent="info"
+            description="Fiabilité moyenne des extractions"
+          />
+          <KPICard
+            title="Projets très fiables"
             value={alerts?.items?.length || 0}
             icon={Star}
-            description="Récemment détectés"
+            accent="warning"
+            description="Score supérieur à 80"
           />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <h3 className="text-lg font-semibold mb-4 text-gray-800">Projets par Secteur</h3>
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={stats?.by_sector ?? []}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="secteur" fontSize={12} />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#2D6A4F" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <h3 className="text-lg font-semibold mb-4 text-gray-800">Répartition par Région</h3>
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={stats?.by_region ?? []}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={100}
-                    fill="#8884d8"
-                    dataKey="count"
-                    nameKey="region"
-                    label={({ name, percent }: { name?: string; percent?: number }) =>
-                      `${name ?? ""} ${((percent ?? 0) * 100).toFixed(0)}%`
-                    }
-                  >
-                    {(stats?.by_region ?? []).map((_entry: Stats["by_region"][number], index: number) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <h3 className="text-lg font-semibold mb-4 text-gray-800">Évolution Mensuelle</h3>
-          <div className="h-80">
+        {/* Charts row 1 */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <ChartCard title="Projets par secteur" delay={60}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={stats?.timeline ?? []}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="mois" fontSize={12} />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="count" name="Projets" stroke="#2D6A4F" strokeWidth={2} />
-              </LineChart>
+              <BarChart data={stats?.by_sector ?? []}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(214 20% 92%)" vertical={false} />
+                <XAxis
+                  dataKey="secteur"
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={{ stroke: "hsl(214 20% 90%)" }}
+                  tick={{ fill: "hsl(215 16% 47%)" }}
+                />
+                <YAxis
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                  tick={{ fill: "hsl(215 16% 47%)" }}
+                />
+                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "hsl(210 30% 96%)" }} />
+                <Bar dataKey="count" fill={CHART[0]} radius={[6, 6, 0, 0]} maxBarSize={48} />
+              </BarChart>
             </ResponsiveContainer>
-          </div>
+          </ChartCard>
+
+          <ChartCard title="Répartition par région" delay={120}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={stats?.by_region ?? []}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={55}
+                  outerRadius={95}
+                  paddingAngle={2}
+                  dataKey="count"
+                  nameKey="region"
+                  label={({ name, percent }: { name?: string; percent?: number }) =>
+                    `${name ?? ""} ${((percent ?? 0) * 100).toFixed(0)}%`
+                  }
+                  labelLine={false}
+                  fontSize={11}
+                >
+                  {(stats?.by_region ?? []).map((_e, i) => (
+                    <Cell key={i} fill={CHART[i % CHART.length]} stroke="white" strokeWidth={2} />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={tooltipStyle} />
+              </PieChart>
+            </ResponsiveContainer>
+          </ChartCard>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <h3 className="text-lg font-semibold mb-4 text-gray-800">Projets Récents Fiables</h3>
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b text-gray-500">
-                <th className="pb-3 font-medium">Titre</th>
-                <th className="pb-3 font-medium">Secteur</th>
-                <th className="pb-3 font-medium">Région</th>
-                <th className="pb-3 font-medium">Montant</th>
-                <th className="pb-3 font-medium">Score</th>
-                <th className="pb-3 font-medium"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {(alerts?.items ?? []).slice(0, 5).map((p) => (
-                <tr key={p.id} className="border-b last:border-0 hover:bg-gray-50">
-                  <td className="py-3 font-medium text-gray-900">{p.titre}</td>
-                  <td className="py-3 text-gray-600">{p.secteur}</td>
-                  <td className="py-3 text-gray-600">{p.region || "N/A"}</td>
-                  <td className="py-3 text-gray-600">{formatMAD(p.montant_mad)}</td>
-                  <td className="py-3"><ScoreBadge score={p.score_fiabilite} /></td>
-                  <td className="py-3">
-                    <Link href={`/projects/${p.id}`}>
-                      <Button variant="outline" size="sm">Détails</Button>
-                    </Link>
-                  </td>
+        {/* Timeline */}
+        <ChartCard title="Évolution mensuelle" delay={180}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={stats?.timeline ?? []}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(214 20% 92%)" vertical={false} />
+              <XAxis
+                dataKey="mois"
+                fontSize={12}
+                tickLine={false}
+                axisLine={{ stroke: "hsl(214 20% 90%)" }}
+                tick={{ fill: "hsl(215 16% 47%)" }}
+              />
+              <YAxis
+                fontSize={12}
+                tickLine={false}
+                axisLine={false}
+                tick={{ fill: "hsl(215 16% 47%)" }}
+              />
+              <Tooltip contentStyle={tooltipStyle} />
+              <Legend wrapperStyle={{ fontSize: 13 }} />
+              <Line
+                type="monotone"
+                dataKey="count"
+                name="Projets"
+                stroke={CHART[0]}
+                strokeWidth={2.5}
+                dot={{ r: 3, fill: CHART[0] }}
+                activeDot={{ r: 5 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        {/* Recent reliable projects */}
+        <div className="surface animate-rise p-6" style={{ animationDelay: "240ms" }}>
+          <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Projets récents fiables
+          </h3>
+          <div className="overflow-hidden rounded-lg border border-border">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-secondary/60 text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Titre</th>
+                  <th className="px-4 py-3 font-medium">Secteur</th>
+                  <th className="px-4 py-3 font-medium">Région</th>
+                  <th className="px-4 py-3 font-medium">Montant</th>
+                  <th className="px-4 py-3 font-medium">Score</th>
+                  <th className="px-4 py-3"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {(alerts?.items ?? []).slice(0, 6).map((p) => (
+                  <tr
+                    key={p.id}
+                    className="border-t border-border transition-colors hover:bg-secondary/40"
+                  >
+                    <td className="max-w-xs truncate px-4 py-3 font-medium text-foreground">
+                      {p.titre}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">{p.secteur}</td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {p.region || "N/A"}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums text-muted-foreground">
+                      {formatMAD(p.montant_mad)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <ScoreBadge score={p.score_fiabilite} />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Link href={`/projects/${p.id}`}>
+                        <Button variant="outline" size="sm">
+                          Détails
+                        </Button>
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+                {!alerts?.items?.length && (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-4 py-8 text-center text-sm text-muted-foreground"
+                    >
+                      Aucun projet fiable détecté. Lancez le scraper pour peupler la base.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>

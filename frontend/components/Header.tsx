@@ -5,27 +5,42 @@ import { Input } from "@/components/ui/input";
 
 interface HeaderProps {
   title: string;
+  subtitle?: string;
   onSearch?: (value: string) => void;
 }
 
-export default function Header({ title, onSearch }: HeaderProps) {
+export default function Header({ title, subtitle, onSearch }: HeaderProps) {
   return (
-    <header className="bg-white border-b px-8 py-4 flex items-center justify-between sticky top-0 z-10">
-      <h2 className="text-2xl font-bold text-gray-800">{title}</h2>
-      <div className="flex items-center gap-4">
+    <header className="sticky top-0 z-20 flex items-center justify-between border-b border-border bg-white/85 px-8 py-4 backdrop-blur-md">
+      <div>
+        <h2 className="text-xl font-semibold tracking-tight text-foreground">
+          {title}
+        </h2>
+        {subtitle && (
+          <p className="mt-0.5 text-sm text-muted-foreground">{subtitle}</p>
+        )}
+      </div>
+
+      <div className="flex items-center gap-3">
         {onSearch && (
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Rechercher..."
-              className="pl-10 w-64"
+              placeholder="Rechercher un projet…"
+              className="h-9 w-72 rounded-lg bg-secondary/60 pl-9 text-sm"
               onChange={(e) => onSearch(e.target.value)}
             />
           </div>
         )}
-        <button className="relative p-2 rounded-full hover:bg-gray-100">
-          <Bell className="h-5 w-5 text-gray-600" />
-          <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
+        <button
+          aria-label="Notifications"
+          className="relative rounded-lg border border-border bg-white p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+        >
+          <Bell className="h-[18px] w-[18px]" />
+          <span className="absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-destructive opacity-60" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-destructive ring-2 ring-white" />
+          </span>
         </button>
       </div>
     </header>

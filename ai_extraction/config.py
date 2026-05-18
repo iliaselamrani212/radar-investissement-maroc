@@ -1,5 +1,5 @@
 """
-config.py - Configuration centrale du système Radar SDG Capital
+config.py - Configuration centrale du systeme InvestiGator 43
 Sources STRICTEMENT publiques et institutionnelles.
 LLM : Ollama Qwen 2.5 7B en LOCAL (zéro coût, zéro clé API).
 """
@@ -41,119 +41,196 @@ DATABASE_URL = os.getenv(
 # Sources STRICTEMENT publiques et institutionnelles
 # JAMAIS de presse / RS / blogs
 
+# ═══════════════════════════════════════════════════════════════
+# SOURCES OFFICIELLES AUTORISÉES (15+)
+# ═══════════════════════════════════════════════════════════════
+# Sources STRICTEMENT publiques et institutionnelles
+# JAMAIS de presse / RS / blogs
 SOURCES_CONFIG = {
-    "amdie": {
-        "nom": "Agence Marocaine de Développement des Investissements",
-        "url": "https://www.amdie.gov.ma/fr/actualites",
+    "masen": {
+        "nom": "MASEN — Moroccan Agency for Sustainable Energy",
+        "url": "https://www.masen.ma/fr/actualites-masen",
         "type": "html",
-        "selectors": {"articles": "article.news", "title": "h2", "content": ".content"},
-        "frequence_h": 1,
+        "selectors": {
+            "articles": ".view-content .views-row, .views-row, article",
+            "title": "h2, h3, .field-content",
+            "content": "p",
+            "date": ".date-display-single, time"
+        },
+        "frequence_h": 12,
         "niveau_fiabilite": 5,
     },
-    "data_gov_ma": {
-        "nom": "Portail Open Data du Maroc",
-        "url": "https://data.gov.ma/data/fr/group/finance",
-        "type": "datasets",
-        "formats": ["xlsx", "xls", "csv"],
+
+    "mef": {
+        "nom": "MEF — Ministère de l'Économie et des Finances",
+        "url": "https://www.finances.gov.ma/fr/Pages/index.aspx",
+        "type": "html",
+        "selectors": {
+            "articles": "a[href*='detail-actualite.aspx'], .actualite, .news-item",
+            "title": "a, h2, h3",
+            "content": "p"
+        },
+        "frequence_h": 6,
+        "niveau_fiabilite": 5,
+    },
+
+    "tangermed": {
+        "nom": "Tanger Med — Communiqués de presse",
+        "url": "https://www.tangermed.ma/fr/communiques-de-presse/",
+        "type": "html",
+        "selectors": {
+            "articles": ".post, article, .communique, .elementor-post, .item",
+            "title": "h2, h3",
+            "content": "p",
+            "date": "time, .date"
+        },
+        "frequence_h": 12,
+        "niveau_fiabilite": 5,
+    },
+
+    "ammc_emetteurs": {
+        "nom": "AMMC — Communiqués de presse des émetteurs",
+        "url": "https://www.ammc.ma/fr/communiques-presse-emetteurs",
+        "type": "html_pdf",
+        "selectors": {
+            "articles": ".views-row, article, li",
+            "title": "h2, h3, a",
+            "content": "p",
+            "date": ".date-display-single, time"
+        },
+        "frequence_h": 6,
+        "niveau_fiabilite": 5,
+    },
+
+    "ammc_actualites": {
+        "nom": "AMMC — Communiqués de presse",
+        "url": "https://www.ammc.ma/fr/actualites/communique-presse",
+        "type": "html_pdf",
+        "selectors": {
+            "articles": ".views-row, article, li",
+            "title": "h2, h3, a",
+            "content": "p",
+            "date": ".date-display-single, time"
+        },
+        "frequence_h": 6,
+        "niveau_fiabilite": 5,
+    },
+
+    "casablanca_bourse_emetteurs": {
+        "nom": "Bourse de Casablanca — Publications des émetteurs",
+        "url": "https://www.casablanca-bourse.com/fr/publications-des-emetteurs",
+        "type": "html_pdf",
+        "selectors": {
+            "articles": ".views-row, article, tr, .item",
+            "title": "h2, h3, a",
+            "content": "p, td",
+            "date": "time, .date"
+        },
+        "frequence_h": 6,
+        "niveau_fiabilite": 5,
+    },
+
+    "hcp_conjoncture": {
+        "nom": "HCP — Conjoncture et prévision économique",
+        "url": "https://www.hcp.ma/Actualite-Conjoncture-et-prevision-economique_r329.html",
+        "type": "html",
+        "selectors": {
+            "articles": "article, .post, .item, .news, div",
+            "title": "h2, h3, a",
+            "content": "p",
+            "date": "time, .date"
+        },
         "frequence_h": 24,
         "niveau_fiabilite": 5,
     },
+
+    "bkam_publications": {
+        "nom": "Bank Al-Maghrib — Catalogue des publications",
+        "url": "https://www.bkam.ma/Publications-et-recherche/Catalogue-des-publications",
+        "type": "html_pdf",
+        "selectors": {
+            "articles": "article, .item, li",
+            "title": "h2, h3, a",
+            "content": "p"
+        },
+        "frequence_h": 24,
+        "niveau_fiabilite": 5,
+    },
+
+    "ocp_group_actualites": {
+        "nom": "OCP Group — Actualités",
+        "url": "https://www.ocpgroup.ma/fr/media/actualites",
+        "type": "html",
+        "selectors": {
+            "articles": ".views-row, article, .card, .item",
+            "title": "h2, h3, a",
+            "content": "p",
+            "date": "time, .date"
+        },
+        "frequence_h": 12,
+        "niveau_fiabilite": 5,
+    },
+
+    "onhym": {
+        "nom": "ONHYM — Actualités",
+        "url": "https://www.onhym.com/fr",
+        "type": "html",
+        "selectors": {
+            "articles": ".news, .actualite, article, .item",
+            "title": "h2, h3, a",
+            "content": "p",
+            "date": "time, .date"
+        },
+        "frequence_h": 24,
+        "niveau_fiabilite": 5,
+    },
+
+    "cri_casablanca": {
+        "nom": "CRI Casablanca-Settat — Actualités investissement",
+        "url": "https://casainvest.ma/fr/actualites",
+        "type": "html",
+        "selectors": {
+            "articles": "article, .item, .views-row, li",
+            "title": "h2, h3, a",
+            "content": "p",
+            "date": "time, .date"
+        },
+        "frequence_h": 12,
+        "niveau_fiabilite": 5,
+    },
+
     "bulletin_officiel": {
         "nom": "Bulletin Officiel du Royaume",
-        "url": "https://www.sgg.gov.ma/Legislation/BulletinsOfficiels",
+        "url": "https://www.sgg.gov.ma/BulletinOfficiel.aspx",
         "type": "pdf",
         "extraction": "pdfplumber",
         "frequence_h": 24,
         "niveau_fiabilite": 5,
     },
-    "mef": {
-        "nom": "Ministère de l'Économie et des Finances",
-        "url": "https://www.finances.gov.ma/fr/Pages/actualites.aspx",
-        "type": "html",
-        "frequence_h": 6,
-        "niveau_fiabilite": 5,
-    },
-    "hcp": {
-        "nom": "Haut-Commissariat au Plan",
-        "url": "https://www.hcp.ma/Publications-recentes_a232.html",
-        "type": "html",
+
+    "data_gov_ma_finance": {
+        "nom": "Open Data Finance",
+        "url": "https://data.gov.ma/data/fr/group/finance",
+        "type": "datasets",
+        "formats": ["xlsx", "xls", "csv", "zip"],
         "frequence_h": 24,
         "niveau_fiabilite": 5,
     },
-    "bkam": {
-        "nom": "Bank Al-Maghrib",
-        "url": "https://www.bkam.ma/Publications-et-recherche",
-        "type": "html",
-        "frequence_h": 24,
-        "niveau_fiabilite": 5,
-    },
-    "casablanca_bourse": {
-        "nom": "Bourse de Casablanca",
-        "url": "https://www.casablanca-bourse.com/bourseweb/Actualite.aspx",
-        "type": "html",
-        "frequence_h": 6,
-        "niveau_fiabilite": 5,
-    },
-    "ammc": {
-        "nom": "Autorité Marocaine du Marché des Capitaux",
-        "url": "https://www.ammc.ma/fr/espace-emetteurs/communiques",
-        "type": "html",
-        "frequence_h": 6,
-        "niveau_fiabilite": 5,
-    },
+
     "charika": {
-        "nom": "Charika - Registre du commerce",
+        "nom": "Charika — Actualités entreprises",
         "url": "https://www.charika.ma/actualites",
-        "type": "js_dynamic",
-        "tool": "playwright",
+        "type": "html",
+        "selectors": {
+            "articles": "article, .item, .post, li",
+            "title": "h2, h3, a",
+            "content": "p",
+            "date": "time, .date"
+        },
         "frequence_h": 6,
-        "niveau_fiabilite": 5,
-    },
-    "masen": {
-        "nom": "Moroccan Agency for Sustainable Energy",
-        "url": "https://www.masen.ma/fr/actualites",
-        "type": "html",
-        "frequence_h": 12,
-        "niveau_fiabilite": 5,
-    },
-    "onhym": {
-        "nom": "Office National des Hydrocarbures et des Mines",
-        "url": "https://www.onhym.com/actualites",
-        "type": "html",
-        "frequence_h": 24,
-        "niveau_fiabilite": 5,
-    },
-    "tangermed": {
-        "nom": "Autorité Portuaire Tanger Med",
-        "url": "https://www.tangermed.ma/communiques",
-        "type": "html",
-        "frequence_h": 12,
-        "niveau_fiabilite": 5,
-    },
-    "ocp_group": {
-        "nom": "OCP Group - Communiqués",
-        "url": "https://www.ocpgroup.ma/fr/media-center/communiques-de-presse",
-        "type": "html",
-        "frequence_h": 12,
-        "niveau_fiabilite": 5,
-    },
-    "conseil_concurrence": {
-        "nom": "Conseil de la Concurrence",
-        "url": "https://www.conseil-concurrence.ma/fr/decisions",
-        "type": "html",
-        "frequence_h": 24,
-        "niveau_fiabilite": 5,
-    },
-    "cri_casablanca": {
-        "nom": "Centre Régional d'Investissement Casablanca-Settat",
-        "url": "https://www.casainvest.ma/actualites",
-        "type": "html",
-        "frequence_h": 12,
-        "niveau_fiabilite": 5,
+        "niveau_fiabilite": 4,
     },
 }
-
-
 # ═══════════════════════════════════════════════════════════════
 # SEUILS IA
 # ═══════════════════════════════════════════════════════════════

@@ -19,6 +19,7 @@ export interface Project {
   id: string;
   titre: string;
   resume_ai?: string | null;
+  fiche_synthetique?: string | null;
   montant_mad?: number | null;
   secteur: string;
   region?: string | null;
@@ -48,6 +49,16 @@ export interface Stats {
   by_region: { region: string; count: number; total: number }[];
   by_stade: { stade: string; count: number }[];
   timeline: { mois: string; count: number }[];
+}
+
+export interface ScoringConfig {
+  id?: number;
+  poids_source: number;
+  poids_triangulation: number;
+  poids_precision: number;
+  poids_fraicheur: number;
+  poids_llm: number;
+  updated_at?: string;
 }
 
 export interface LlmStatus {
@@ -155,6 +166,71 @@ export const exportCsv = (params?: Record<string, any>) =>
     link.click();
     link.remove();
   });
+
+export const exportPdf = (params?: Record<string, any>) =>
+  api.get("/export/pdf", { params: cleanParams(params), responseType: "blob" }).then((res) => {
+    const url = window.URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "projets_investissement.pdf");
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  });
+
+export const fetchScoringConfig = () =>
+  api.get("/config/scoring").then((res) => res.data as ScoringConfig);
+
+export const updateScoringConfig = (payload: ScoringConfig) =>
+  api.put("/config/scoring", payload).then((res) => res.data);
+
+export const recalculateScoring = () =>
+  api.post("/config/scoring/recalculate").then((res) => res.data);
+
+export const fetchVeilleSchedulerStatus = () =>
+  api.get("/veille/scheduler/status").then((res) => res.data);
+
+export const runVeilleNow = () =>
+  api.post("/veille/run", null, { timeout: 120000 }).then((res) => res.data);
+
+// ─── RAG ───────────────────────────────────────────────────────
+export interface RagSource {
+  n: number;
+  titre?: string | null;
+  source?: string | null;
+  url?: string | null;
+  doc_type?: string | null;
+  score?: number | null;
+  extrait?: string | null;
+}
+
+export interface RagAnswer {
+  reponse: string;
+  sources: RagSource[];
+  contexte_trouve: boolean;
+}
+
+export interface RagStatus {
+  ok: boolean;
+  total_chunks: number;
+  par_source: { source: string; nb: number }[];
+}
+
+export const fetchRagStatus = () =>
+  api.get("/rag/status", { timeout: 8000 }).then((res) => res.data as RagStatus);
+
+export const ingestRag = () =>
+  api.post("/rag/ingest", null, { timeout: 600000 }).then((res) => res.data);
+
+export const askProjectRag = (projectId: string, question: string, topK = 5) =>
+  api
+    .post(`/projects/${projectId}/ask`, { question, top_k: topK }, { timeout: 120000 })
+    .then((res) => res.data as RagAnswer);
+
+export const askGlobalRag = (question: string, topK = 5) =>
+  api
+    .post("/rag/ask", { question, top_k: topK }, { timeout: 120000 })
+    .then((res) => res.data as RagAnswer);
 
 // Helpers
 export const formatMAD = (amount: number | null | undefined) => {

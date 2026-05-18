@@ -1,24 +1,65 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { LucideIcon } from "lucide-react";
+import { LucideIcon, TrendingUp, TrendingDown } from "lucide-react";
 
 interface KPICardProps {
   title: string;
   value: string | number;
   icon: LucideIcon;
   description?: string;
+  trend?: { value: string; up?: boolean };
+  accent?: "primary" | "info" | "warning" | "success";
 }
 
-export default function KPICard({ title, value, icon: Icon, description }: KPICardProps) {
+const ACCENTS: Record<string, string> = {
+  primary: "bg-primary/10 text-primary",
+  info: "bg-info/10 text-info",
+  warning: "bg-warning/10 text-warning",
+  success: "bg-success/10 text-success",
+};
+
+export default function KPICard({
+  title,
+  value,
+  icon: Icon,
+  description,
+  trend,
+  accent = "primary",
+}: KPICardProps) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-gray-500">{title}</CardTitle>
-        <Icon className="h-5 w-5 text-primary" />
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold text-gray-900">{value}</div>
-        {description && <p className="text-xs text-gray-500 mt-1">{description}</p>}
-      </CardContent>
-    </Card>
+    <div className="surface surface-hover animate-rise p-5">
+      <div className="flex items-start justify-between">
+        <p className="text-sm font-medium text-muted-foreground">{title}</p>
+        <div
+          className={`flex h-9 w-9 items-center justify-center rounded-lg ${ACCENTS[accent]}`}
+        >
+          <Icon className="h-[18px] w-[18px]" />
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-end gap-2">
+        <span className="text-[28px] font-semibold leading-none tracking-tight tabular-nums text-foreground">
+          {value}
+        </span>
+        {trend && (
+          <span
+            className={`stat-chip mb-0.5 ${
+              trend.up
+                ? "bg-success/10 text-success"
+                : "bg-destructive/10 text-destructive"
+            }`}
+          >
+            {trend.up ? (
+              <TrendingUp className="h-3 w-3" />
+            ) : (
+              <TrendingDown className="h-3 w-3" />
+            )}
+            {trend.value}
+          </span>
+        )}
+      </div>
+
+      {description && (
+        <p className="mt-2 text-xs text-muted-foreground">{description}</p>
+      )}
+    </div>
   );
 }

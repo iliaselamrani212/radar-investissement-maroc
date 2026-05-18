@@ -1,6 +1,6 @@
 """
 veille/tendances.py - Fonctionnalité 12-A : Veille stratégique hebdomadaire
-Détecte les tendances et génère un rapport pour SDG Capital.
+Détecte les tendances et génère un rapport de veille.
 """
 import logging
 from typing import List, Dict, Any
@@ -114,7 +114,7 @@ Top 5 projets :
 def _rapport_fallback(chiffres: Dict, projets_top: List) -> str:
     """Rapport statique de secours"""
     lignes = [
-        "# 📊 Rapport de veille hebdomadaire - SDG Capital",
+        "# Rapport de veille hebdomadaire",
         "",
         "## 1. Chiffres clés",
         f"- Nombre de nouveaux projets : **{chiffres['nb_projets']}**",

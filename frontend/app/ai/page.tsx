@@ -39,6 +39,15 @@ const getErrorMessage = (error: unknown) => {
   return "Erreur pendant l'appel IA";
 };
 
+const cleanDisplayText = (text: string) =>
+  text
+    .replace(/SDG\s+Capital/gi, "")
+    .replace(/data\.gov\.ma/gi, "")
+    .replace(/\n?##\s+Sources\s*&\s*fiabilit\S*[\s\S]*$/i, "")
+    .replace(/\s\[\d+\]/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
 function FieldValue({ label, value }: { label: string; value?: string | number | null }) {
   return (
     <div>
@@ -91,7 +100,10 @@ function ProjectPreview({ project }: { project: LlmProject }) {
         <div className="rounded-lg border bg-gray-50 p-4">
           <p className="mb-3 text-sm font-semibold text-gray-800">Fiche synthetique</p>
           <div className="max-h-96 overflow-y-auto whitespace-pre-wrap text-sm leading-6 text-gray-700">
-            {project.fiche_synthetique}
+            {cleanDisplayText(project.fiche_synthetique).replace(
+              /\n?##\s+Sources\s*&\s*fiabilit\S*[\s\S]*$/i,
+              ""
+            )}
           </div>
         </div>
       )}
@@ -236,18 +248,6 @@ export default function AiPage() {
                   onChange={(event) => updateForm("title", event.target.value)}
                   placeholder="Titre du document"
                 />
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <Input
-                    value={form.source}
-                    onChange={(event) => updateForm("source", event.target.value)}
-                    placeholder="Source"
-                  />
-                  <Input
-                    value={form.url}
-                    onChange={(event) => updateForm("url", event.target.value)}
-                    placeholder="URL source"
-                  />
-                </div>
                 <textarea
                   value={form.content}
                   onChange={(event) => updateForm("content", event.target.value)}
@@ -318,7 +318,7 @@ export default function AiPage() {
                 )}
               </div>
               <div className="max-h-[520px] overflow-y-auto whitespace-pre-wrap rounded-lg border bg-gray-50 p-4 text-sm leading-6 text-gray-700">
-                {weeklyQuery.data.rapport_markdown}
+                {cleanDisplayText(weeklyQuery.data.rapport_markdown)}
               </div>
             </CardContent>
           </Card>

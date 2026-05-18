@@ -1,4 +1,4 @@
-# 🤖 Radar SDG Capital - Module IA (100% LOCAL)
+# InvestiGator 43 - Module IA (100% LOCAL)
 
 Système d'extraction et d'enrichissement automatique des projets d'investissement au Maroc, propulsé par **Qwen 2.5 7B via Ollama** en LOCAL.
 
@@ -117,7 +117,7 @@ Tu as déjà `qwen2.5:7b` → laisse cette config par défaut.
 
 ---
 
-## 🎯 Les 4 livrables SDG
+## Les 4 livrables
 
 | # | Livrable | Module |
 |---|----------|--------|
@@ -176,19 +176,12 @@ Normal pour des documents très courts. Ajuste `SEUIL_CONFIANCE_MIN` dans `confi
 
 ---
 
-## 📊 Sources officielles utilisées (15+)
+## Collecte institutionnelle
 
-**STRICTEMENT publiques et institutionnelles** :
-
-- AMDIE, data.gov.ma, Bulletin Officiel, MEF, HCP
-- Bank Al-Maghrib, Bourse de Casablanca, AMMC, Charika
-- MASEN, ONHYM, Tanger Med, OCP Group
-- Conseil de la Concurrence, CRI (12 régions)
-
-❌ **Aucune presse, aucun réseau social, aucun blog.**
+La collecte reste limitée à des contenus publics et institutionnels. Les références techniques ne sont pas affichées dans l'interface utilisateur.
 
 ---
 
-## 🎤 Phrase clé pour le jury
+## Phrase clé pour le jury
 
-> Notre système IA accomplit **12 fonctionnalités distinctes** alignées strictement avec les exigences du brief SDG Capital, exploitant **exclusivement** des sources publiques et institutionnelles, propulsé par un LLM 100% local (Qwen 2.5 7B via Ollama). **Zéro dépendance externe, zéro coût, souveraineté complète des données.**
+> Notre système IA accomplit **12 fonctionnalités distinctes** alignées avec le brief, avec un LLM 100% local (Qwen 2.5 7B via Ollama). **Zéro dépendance externe, zéro coût, souveraineté complète des données.**

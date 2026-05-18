@@ -227,7 +227,7 @@ Format JSON STRICT :
 # Aligné avec LIVRABLE 3 : "Fiches projets synthétiques"
 # ═══════════════════════════════════════════════════════════════
 
-PROMPT_FICHE_PROJET = """Génère une fiche projet professionnelle pour SDG Capital, fonds d'investissement.
+PROMPT_FICHE_PROJET = """Génère une fiche projet professionnelle pour un radar des projets d'investissement au Maroc.
 
 DONNÉES DU PROJET :
 {donnees_projet}
@@ -235,32 +235,26 @@ DONNÉES DU PROJET :
 CONTEXTE MACROÉCONOMIQUE :
 {contexte}
 
-SOURCES CONFIRMÉES :
-{sources}
-
 STRUCTURE OBLIGATOIRE EN MARKDOWN :
 
 # {titre_projet}
 
-## 📋 Résumé exécutif
+## Résumé exécutif
 (2-3 phrases factuelles : QUOI, QUI, COMBIEN, OÙ, QUAND)
 
-## 🎯 Points clés
+## Points clés
 - **Montant** : ... (avec comparaison sectorielle si disponible)
 - **Secteur** : ... ({sous_secteur} si présent)
 - **Localisation** : ... (zone économique si pertinent)
 - **Porteur** : ... (profil bref)
 - **Calendrier** : ...
 
-## 📊 Analyse contextuelle
+## Analyse contextuelle
 (3-4 phrases : importance dans le secteur, cohérence avec stratégies nationales, effet d'entraînement attendu)
 
-## ✅ Sources & fiabilité
-- Nombre de sources : ...
-- Niveau de fiabilité : ...
-- Sources : ...
-
 STYLE : Factuel, neutre, professionnel. Pas d'adjectifs marketing.
+INTERDIT : aucun emoji, aucune icône, aucun symbole décoratif dans la sortie.
+INTERDIT : aucune mention de sources, d'URL ou de nom de client dans la sortie.
 Chiffres précis uniquement issus des données fournies."""
 
 
@@ -274,7 +268,7 @@ DONNÉES : {projets}
 
 Génère un rapport de veille stratégique structuré en MARKDOWN :
 
-# 📊 Rapport de veille hebdomadaire - SDG Capital
+# Rapport de veille hebdomadaire
 
 ## 1. Chiffres clés
 - Nombre de nouveaux projets : ...
@@ -292,7 +286,7 @@ Génère un rapport de veille stratégique structuré en MARKDOWN :
 (liste avec 1 ligne d'analyse par projet)
 
 ## 5. Recommandations d'investigation
-(2-3 axes que SDG Capital devrait creuser)
+(2-3 axes à creuser)
 
 STYLE : Analyste senior, factuel, actionnable.
 Pas d'emojis sauf dans les titres. Chiffres précis."""
@@ -302,7 +296,7 @@ Pas d'emojis sauf dans les titres. Chiffres précis."""
 # PROMPT : ALERTE PERSONNALISÉE (Fonctionnalité 12-B)
 # ═══════════════════════════════════════════════════════════════
 
-PROMPT_ALERTE_PERSONNALISEE = """Profil de l'analyste SDG :
+PROMPT_ALERTE_PERSONNALISEE = """Profil de l'analyste :
 - Secteurs d'intérêt : {secteurs}
 - Régions cibles : {regions}
 - Montant minimum : {montant_min} MAD

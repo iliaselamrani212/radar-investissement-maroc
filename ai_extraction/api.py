@@ -27,7 +27,7 @@ from .veille.recommandations import recommander_similaires
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="Radar SDG Capital - API",
+    title="InvestiGator 43 - API",
     description="API du radar des projets d'investissement au Maroc",
     version="1.0.0",
 )
@@ -167,7 +167,7 @@ def extraire(document: DocumentInput):
 @app.get("/")
 def root():
     return {
-        "service": "Radar SDG Capital",
+        "service": "InvestiGator 43",
         "version": "1.0.0",
         "status": "online",
         "endpoints": [

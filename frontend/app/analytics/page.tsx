@@ -112,11 +112,33 @@ export default function AnalyticsPage() {
 
           <div className="bg-white p-6 rounded-xl shadow-sm border">
             <h3 className="text-lg font-semibold mb-4 text-gray-800">
-              Répartition Globale
+              Top Projets par Investissement
             </h3>
 
-            <div className="flex items-center justify-center h-80 text-gray-500">
-              <p>Graphique de distribution des scores basé sur les données de l'API.</p>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={(stats?.by_sector ?? []).slice(0, 6).map((s) => ({
+                    secteur: s.secteur,
+                    projets: s.count,
+                    montant: Math.round((s.total ?? 0) / 1e6),
+                  }))}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="secteur" fontSize={11} />
+                  <YAxis yAxisId="left" orientation="left" stroke="#2D6A4F" label={{ value: "Projets", angle: -90, position: "insideLeft", fontSize: 11 }} />
+                  <YAxis yAxisId="right" orientation="right" stroke="#40916C" label={{ value: "M MAD", angle: 90, position: "insideRight", fontSize: 11 }} />
+                  <Tooltip
+                    formatter={(value, name) =>
+                      name === "montant"
+                        ? [`${Number(value).toLocaleString("fr-MA")} M MAD`, "Investissement"]
+                        : [value, "Projets"]
+                    }
+                  />
+                  <Bar yAxisId="left" dataKey="projets" fill="#74C69D" radius={[4, 4, 0, 0]} name="projets" />
+                  <Bar yAxisId="right" dataKey="montant" fill="#2D6A4F" radius={[4, 4, 0, 0]} name="montant" />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
         </div>

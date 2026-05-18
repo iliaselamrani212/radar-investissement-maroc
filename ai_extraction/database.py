@@ -17,7 +17,7 @@ from .models import ProjetInvestissement, SourceArticle
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = "data/radar_sdg.db"
+DB_PATH = str(Path(__file__).resolve().parent.parent / "data" / "radar_sdg.db")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS projets (
     -- Fiabilité
     score_confiance_extraction REAL DEFAULT 0.5,
     score_fiabilite REAL,
+    score_details TEXT,
     sources TEXT,                 -- JSON list
     nb_sources_confirmees INTEGER DEFAULT 1,
     source_principale TEXT,
@@ -99,6 +100,25 @@ CREATE TABLE IF NOT EXISTS profils_utilisateurs (
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS scoring_config (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    poids_source REAL NOT NULL DEFAULT 0.30,
+    poids_triangulation REAL NOT NULL DEFAULT 0.30,
+    poids_precision REAL NOT NULL DEFAULT 0.15,
+    poids_fraicheur REAL NOT NULL DEFAULT 0.15,
+    poids_llm REAL NOT NULL DEFAULT 0.10,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS veille_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    status TEXT NOT NULL,
+    nb_projets INTEGER DEFAULT 0,
+    rapport_markdown TEXT,
+    error TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_secteur ON projets(secteur);
 CREATE INDEX IF NOT EXISTS idx_region ON projets(region);
 CREATE INDEX IF NOT EXISTS idx_stade ON projets(stade_avancement);
@@ -130,6 +150,16 @@ def init_db():
     """Initialise la base de données (à appeler au démarrage)"""
     with get_conn() as conn:
         conn.executescript(SCHEMA_SQL)
+        try:
+            conn.execute("ALTER TABLE projets ADD COLUMN score_details TEXT")
+        except sqlite3.OperationalError:
+            pass
+        conn.execute("""
+            INSERT OR IGNORE INTO scoring_config (
+                id, poids_source, poids_triangulation, poids_precision,
+                poids_fraicheur, poids_llm
+            ) VALUES (1, 0.30, 0.30, 0.15, 0.15, 0.10)
+        """)
     logger.info(f"✅ Base initialisée : {DB_PATH}")
 
 
@@ -151,6 +181,7 @@ def save_projet(projet: ProjetInvestissement) -> str:
     data["sources"] = json.dumps(data.get("sources", []))
     data["anomalies"] = json.dumps(data.get("anomalies", []))
     data["contexte_macro"] = json.dumps(data.get("contexte_macro", {}))
+    data["score_details"] = json.dumps(data.get("score_details") or {})
     # Dates en string ISO
     if data.get("date_annonce"):
         data["date_annonce"] = str(data["date_annonce"])
@@ -298,6 +329,58 @@ def get_alertes_user(user_id: str, non_lues_seulement: bool = False) -> List[Dic
         return result
 
 
+def get_scoring_config() -> Dict[str, Any]:
+    """Retourne la configuration active du scoring."""
+    init_db()
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM scoring_config WHERE id = 1").fetchone()
+        return dict(row)
+
+
+def update_scoring_config(config: Dict[str, float]) -> Dict[str, Any]:
+    """Met a jour les ponderations du scoring."""
+    champs = [
+        "poids_source", "poids_triangulation", "poids_precision",
+        "poids_fraicheur", "poids_llm",
+    ]
+    valeurs = {champ: float(config.get(champ, 0)) for champ in champs}
+    total = sum(valeurs.values())
+    if abs(total - 1.0) > 0.001:
+        raise ValueError("La somme des poids doit etre egale a 1.0")
+
+    with get_conn() as conn:
+        conn.execute("""
+            UPDATE scoring_config
+            SET poids_source = :poids_source,
+                poids_triangulation = :poids_triangulation,
+                poids_precision = :poids_precision,
+                poids_fraicheur = :poids_fraicheur,
+                poids_llm = :poids_llm,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = 1
+        """, valeurs)
+    return get_scoring_config()
+
+
+def save_veille_run(status: str, nb_projets: int = 0, rapport_markdown: str = "", error: str = "") -> int:
+    """Journalise une execution de veille automatique."""
+    with get_conn() as conn:
+        cursor = conn.execute("""
+            INSERT INTO veille_runs (status, nb_projets, rapport_markdown, error)
+            VALUES (?, ?, ?, ?)
+        """, (status, nb_projets, rapport_markdown, error))
+        return cursor.lastrowid
+
+
+def get_last_veille_run() -> Optional[Dict[str, Any]]:
+    init_db()
+    with get_conn() as conn:
+        row = conn.execute("""
+            SELECT * FROM veille_runs ORDER BY created_at DESC, id DESC LIMIT 1
+        """).fetchone()
+        return dict(row) if row else None
+
+
 # ═══════════════════════════════════════════════════════════════
 # STATISTIQUES POUR DASHBOARD (LIVRABLE 1)
 # ═══════════════════════════════════════════════════════════════
@@ -375,9 +458,10 @@ def _row_to_projet(row) -> ProjetInvestissement:
             d[champ] = json.loads(d.get(champ) or "[]")
         except Exception:
             d[champ] = []
-    try:
-        d["contexte_macro"] = json.loads(d.get("contexte_macro") or "{}")
-    except Exception:
-        d["contexte_macro"] = {}
+    for champ in ["contexte_macro", "score_details"]:
+        try:
+            d[champ] = json.loads(d.get(champ) or "{}")
+        except Exception:
+            d[champ] = {}
 
     return ProjetInvestissement(**{k: v for k, v in d.items() if v is not None})

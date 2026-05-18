@@ -78,6 +78,7 @@ class ProjetInvestissement(BaseModel):
     # === FIABILITÉ & SOURCES ===
     score_confiance_extraction: float = Field(0.5, ge=0, le=1)
     score_fiabilite: Optional[float] = Field(None, ge=0, le=100)
+    score_details: Optional[Dict[str, Any]] = Field(default_factory=dict)
     sources: List[Dict[str, Any]] = Field(default_factory=list)
     nb_sources_confirmees: int = 1
     source_principale: Optional[str] = None

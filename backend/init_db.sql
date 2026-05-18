@@ -38,6 +38,16 @@ CREATE TABLE IF NOT EXISTS regions (
     longitude NUMERIC
 );
 
+CREATE TABLE IF NOT EXISTS scoring_config (
+    id INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    poids_source NUMERIC NOT NULL DEFAULT 0.30,
+    poids_triangulation NUMERIC NOT NULL DEFAULT 0.30,
+    poids_precision NUMERIC NOT NULL DEFAULT 0.15,
+    poids_fraicheur NUMERIC NOT NULL DEFAULT 0.15,
+    poids_llm NUMERIC NOT NULL DEFAULT 0.10,
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS idx_projects_secteur ON projects(secteur);
 CREATE INDEX IF NOT EXISTS idx_projects_region ON projects(region);
 CREATE INDEX IF NOT EXISTS idx_projects_score ON projects(score_fiabilite DESC);
@@ -58,3 +68,9 @@ INSERT INTO regions VALUES
 ('Laâyoune-Sakia El Hamra', 27.1536, -13.2033),
 ('Dakhla-Oued Ed-Dahab', 23.6848, -15.9579)
 ON CONFLICT (nom) DO NOTHING;
+
+INSERT INTO scoring_config (
+    id, poids_source, poids_triangulation, poids_precision,
+    poids_fraicheur, poids_llm
+) VALUES (1, 0.30, 0.30, 0.15, 0.15, 0.10)
+ON CONFLICT (id) DO NOTHING;

@@ -50,3 +50,15 @@ class Region(Base):
     nom = Column(Text, primary_key=True)
     latitude = Column(Numeric)
     longitude = Column(Numeric)
+
+
+class ScoringConfig(Base):
+    __tablename__ = "scoring_config"
+
+    id = Column(Integer, primary_key=True, default=1)
+    poids_source = Column(Numeric, nullable=False, default=0.30)
+    poids_triangulation = Column(Numeric, nullable=False, default=0.30)
+    poids_precision = Column(Numeric, nullable=False, default=0.15)
+    poids_fraicheur = Column(Numeric, nullable=False, default=0.15)
+    poids_llm = Column(Numeric, nullable=False, default=0.10)
+    updated_at = Column(DateTime, server_default=func.now())
